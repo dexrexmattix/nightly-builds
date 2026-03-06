@@ -6,27 +6,29 @@ WORKSPACE="/Users/codimattix/.openclaw/workspace"
 OLLAMA_URL="http://192.168.1.79:11434"
 MODEL="qwen2.5:7b"
 
-# Gather context
-WORKSTATE=$(cat "$WORKSPACE/WORKSTATE.md" 2>/dev/null | head -60)
-PERSONAL=$(cat "$WORKSPACE/PERSONALSTATE.md" 2>/dev/null | head -40)
+# Gather context — SECURITY: extract themes only, never send raw personal/work content externally
 SPARK=$(cat "$WORKSPACE/SPARK.md" 2>/dev/null)
-MEMORY=$(cat "$WORKSPACE/MEMORY.md" 2>/dev/null | head -50)
+
+# Safe summary: extract section headers and bullet topics only (no sensitive details)
+WORKSTATE_THEMES=$(cat "$WORKSPACE/WORKSTATE.md" 2>/dev/null | grep -E "^#|^- \*\*|^\*\*" | head -20)
+PERSONAL_THEMES=$(cat "$WORKSPACE/PERSONALSTATE.md" 2>/dev/null | grep -E "^#|^- \*\*|^\*\*" | head -15)
+MEMORY_THEMES=$(cat "$WORKSPACE/MEMORY.md" 2>/dev/null | grep -E "^#|^##|^- \*\*" | head -20)
 
 PROMPT="You are a scout agent for Dex, an AI assistant helping Codi Mattix.
-Your job: analyze Codi's life context and pick ONE concrete thing to build tonight that would make his life meaningfully easier through tech or automation.
+Your job: pick ONE concrete thing to build tonight that would make his life meaningfully easier through tech or automation.
 
-CONTEXT:
-## Work State
-$WORKSTATE
+CONTEXT THEMES (sanitized — no personal details):
+## Work Focus Areas
+$WORKSTATE_THEMES
 
-## Personal State
-$PERSONAL
+## Personal Focus Areas
+$PERSONAL_THEMES
 
-## Spark Ideas
+## Spark Ideas (verbatim — user-generated)
 $SPARK
 
-## Memory
-$MEMORY
+## Infrastructure/Capabilities
+$MEMORY_THEMES
 
 OUTPUT FORMAT (strict):
 ---
