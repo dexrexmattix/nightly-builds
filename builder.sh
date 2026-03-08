@@ -1,89 +1,111 @@
 #!/bin/bash
 # builder.sh — Takes the brief from scout, builds the actual thing
-# Runs on local Ollama coder model (free). Output: files in /tmp/nightly-output/
+# Uses GPT-4.1-mini (resilient — no Ollama dependency)
 
-OLLAMA_URL="http://192.168.1.79:11434"
-MODEL="qwen2.5-coder:7b"
-BRIEF=$(cat /tmp/nightly-brief.md 2>/dev/null)
+OPENAI_KEY="${OPENAI_API_KEY}"
+BRIEF_FILE="/tmp/nightly-brief.md"
 OUTPUT_DIR="/tmp/nightly-output"
+RAW_FILE="/tmp/nightly-raw-response.txt"
 
-if [ -z "$BRIEF" ]; then
+if [ ! -f "$BRIEF_FILE" ] || [ ! -s "$BRIEF_FILE" ]; then
   echo "No brief found. Run scout.sh first."
   exit 1
 fi
 
+rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-PROMPT="You are a builder agent. You write clean, working code and scripts.
+echo "Calling GPT-4.1-mini to build..."
 
-Here is your build brief:
-$BRIEF
+python3 << PYEOF
+import urllib.request, json, sys
 
-Your job: build exactly what's described. Output ONLY the deliverable files.
+key = "$OPENAI_KEY"
+brief = open("$BRIEF_FILE").read()
 
-For each file, use this format:
-=== FILENAME: path/filename.ext ===
-[file contents]
-=== END ===
+system = """You are a builder agent. Write clean, complete, working code.
 
 Rules:
-- Write complete, runnable code. No placeholders.
-- Include a README.md explaining what it does and how to use it (one paragraph, plain English, no jargon).
-- If it's a script, make it executable (add shebang).
-- Keep it simple. One file if possible.
-- Test cases or example usage if relevant."
+- Output ONLY the deliverable files. No explanations before or after.
+- For each file use this EXACT format (no variations):
+=== FILENAME: filename.ext ===
+[complete file contents]
+=== END ===
+- Always include a README.md (one paragraph, plain English, what it does and how to run it).
+- Write complete runnable code. No placeholders. No TODOs.
+- Keep it simple — one or two files max.
+- Target: a non-coder who runs things via terminal or browser."""
 
-RESPONSE=$(curl -s --max-time 120 -X POST "$OLLAMA_URL/api/generate" \
-  -H "Content-Type: application/json" \
-  -d "{\"model\": \"$MODEL\", \"prompt\": $(echo "$PROMPT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))'), \"stream\": false}" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['response'])")
+data = json.dumps({
+    "model": "gpt-4.1-mini",
+    "messages": [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"Build exactly what this brief describes:\n\n{brief}\n\nOutput the files now using the exact === FILENAME === format."}
+    ],
+    "max_tokens": 3000,
+    "temperature": 0.3
+}).encode()
 
-# Parse and save files
-echo "$RESPONSE" | python3 - <<'PYEOF'
-import sys, os, re
+req = urllib.request.Request(
+    "https://api.openai.com/v1/chat/completions",
+    data=data,
+    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+)
 
-content = sys.stdin.read()
-output_dir = "/tmp/nightly-output"
-os.makedirs(output_dir, exist_ok=True)
-
-# Always save raw response first — no matter what
-with open(f"{output_dir}/raw_response.md", "w") as f:
-    f.write(content)
-
-if not content.strip():
-    print("ERROR: Builder got an empty response from Ollama. Check if Ollama is reachable and the model is loaded.")
+try:
+    res = urllib.request.urlopen(req, timeout=60)
+    body = json.loads(res.read())
+    content = body["choices"][0]["message"]["content"]
+    with open("$RAW_FILE", "w") as f:
+        f.write(content)
+    print(f"Builder: got {len(content)} chars from API")
+except Exception as e:
+    print(f"Builder API error: {e}")
     sys.exit(1)
+PYEOF
 
-print(f"Raw response saved ({len(content)} chars)")
+if [ ! -f "$RAW_FILE" ] || [ ! -s "$RAW_FILE" ]; then
+  echo "ERROR: No response from builder API."
+  exit 1
+fi
 
-# Try strict format first: === FILENAME: ... === END ===
+# Copy raw to output dir
+cp "$RAW_FILE" "$OUTPUT_DIR/raw_response.md"
+
+# Parse files from raw response
+python3 << PYEOF2
+import re, os
+
+with open("$RAW_FILE") as f:
+    content = f.read()
+
+output_dir = "$OUTPUT_DIR"
+
 pattern = r'=== FILENAME: (.+?) ===\n(.*?)=== END ==='
 matches = re.findall(pattern, content, re.DOTALL)
 
-# Fallback: try markdown code blocks with filenames (```filename\n...\n```)
+# Fallback: markdown code blocks
 if not matches:
-    pattern_md = r'```(?:\w+)?\s*\n#\s*(\S+)\n(.*?)```'
-    matches_md = re.findall(pattern_md, content, re.DOTALL)
-    if matches_md:
-        matches = matches_md
-        print("Used fallback markdown code block parser")
+    pattern_md = r'```(?:\w+)?\n(.*?)```'
+    blocks = re.findall(pattern_md, content, re.DOTALL)
+    if blocks:
+        matches = [(f"output_{i}.sh" if i == 0 else f"file_{i}.txt", b) for i, b in enumerate(blocks)]
+        print("Used fallback code block parser")
 
 if matches:
     for filename, file_content in matches:
         filename = filename.strip()
-        # Skip obviously bad filenames
-        if len(filename) > 200 or '\n' in filename:
+        if not filename or len(filename) > 200 or '\n' in filename:
             continue
         filepath = os.path.join(output_dir, filename)
         if '/' in filename:
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, 'w') as f:
             f.write(file_content.strip())
-        print(f"Created: {filepath}")
+        print(f"Created: {filename} ({len(file_content)} chars)")
 else:
-    # No structured files — save raw as the build artifact so it's not lost
-    print("No structured files parsed — raw_response.md IS the build artifact")
-PYEOF
+    print("Warning: no structured files found — raw_response.md is the artifact")
+PYEOF2
 
-echo "Builder complete. Output in $OUTPUT_DIR"
+echo "Builder complete."
 ls -la "$OUTPUT_DIR"
