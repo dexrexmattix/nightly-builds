@@ -1,46 +1,63 @@
 #!/bin/bash
-# deliver.sh — Reviews output, commits to GitHub, delivers to Codi via Slack
-# Uses Flash model (cheap) for review. Calls OpenClaw to send Slack message.
+# deliver.sh — Commits both GPT + Phi-4 outputs, delivers comparison to Codi via Slack
 
-OUTPUT_DIR="/tmp/nightly-output"
-BRIEF=$(cat /tmp/nightly-brief.md 2>/dev/null)
 DATE=$(date +%Y-%m-%d)
-BRANCH="nightly-$DATE"
+BRIEF=$(cat /tmp/nightly-brief.md 2>/dev/null)
+BUILD_TARGET=$(echo "$BRIEF" | grep 'BUILD TARGET:' | sed 's/BUILD TARGET: //' | head -1)
 
-if [ ! -d "$OUTPUT_DIR" ]; then
-  echo "No output found. Run builder.sh first."
+GPT_DIR="/tmp/nightly-output-gpt"
+PHI_DIR="/tmp/nightly-output-phi"
+REPO_DIR="$HOME/Projects/nightly-builds/builds/$DATE"
+
+if [ ! -d "$GPT_DIR" ] && [ ! -d "$PHI_DIR" ]; then
+  echo "No build output found."
   exit 1
 fi
 
-# Copy output to repo
-REPO_DIR="$HOME/Projects/nightly-builds/builds/$DATE"
-mkdir -p "$REPO_DIR"
-cp -r "$OUTPUT_DIR/"* "$REPO_DIR/" 2>/dev/null
+# Copy outputs to repo
+mkdir -p "$REPO_DIR/gpt" "$REPO_DIR/phi4"
+[ -d "$GPT_DIR" ] && cp -r "$GPT_DIR/"* "$REPO_DIR/gpt/" 2>/dev/null
+[ -d "$PHI_DIR" ] && cp -r "$PHI_DIR/"* "$REPO_DIR/phi4/" 2>/dev/null
+
+# Save brief too
+cp /tmp/nightly-brief.md "$REPO_DIR/brief.md" 2>/dev/null
 
 # Commit to GitHub
 cd "$HOME/Projects/nightly-builds"
 git add .
-git commit -m "Nightly build: $DATE
+git commit -m "Nightly build: $DATE — $BUILD_TARGET
 
-$(cat /tmp/nightly-brief.md | head -5)"
-git push origin main 2>&1 || git push --set-upstream origin main 2>&1
+GPT-4.1-mini + Phi-4 comparison build"
+git push origin main 2>&1 || echo "Push failed — continuing"
 
-# Get README summary
-README=$(cat "$REPO_DIR/README.md" 2>/dev/null || cat "$OUTPUT_DIR/README.md" 2>/dev/null || echo "See GitHub for details.")
+# Build Slack message
+GPT_README=$(cat "$REPO_DIR/gpt/README.md" 2>/dev/null | head -4 || echo "(no README)")
+PHI_README=$(cat "$REPO_DIR/phi4/README.md" 2>/dev/null | head -4 || echo "(not generated or Phi-4 unavailable)")
 
-# Send Slack notification via OpenClaw
+GPT_FILES=$(ls "$REPO_DIR/gpt/" 2>/dev/null | grep -v raw_response | grep -v README | tr '\n' ', ' | sed 's/,$//')
+PHI_FILES=$(ls "$REPO_DIR/phi4/" 2>/dev/null | grep -v raw_response | grep -v README | tr '\n' ', ' | sed 's/,$//')
+
 SLACK_MSG="🌙 *Nightly Build — $DATE*
+*Tonight's target:* $BUILD_TARGET
 
-$(echo "$BRIEF" | grep 'BUILD TARGET:' | sed 's/BUILD TARGET: //')
+---
+*🤖 GPT-4.1-mini said:*
+$GPT_README
+Files: $GPT_FILES
 
-*What it does:* $README
+---
+*🖥️ Phi-4 (Mac mini) said:*
+$PHI_README
+Files: $PHI_FILES
 
-*Live on GitHub:* https://github.com/dexrexmattix/nightly-builds/tree/main/builds/$DATE
+---
+*Compare on GitHub:*
+• GPT: https://github.com/dexrexmattix/nightly-builds/tree/main/builds/$DATE/gpt
+• Phi-4: https://github.com/dexrexmattix/nightly-builds/tree/main/builds/$DATE/phi4
 
-Reply 'deploy it' and I'll set it up, or ignore if it's not useful."
+Reply 'deploy it' and I'll set it up."
 
-# Use openclaw to send to Slack
 openclaw message send --channel slack --to cwmattix --message "$SLACK_MSG" 2>/dev/null || \
-  echo "Slack delivery: $SLACK_MSG"
+  echo "Slack: $SLACK_MSG"
 
 echo "Delivery complete."
