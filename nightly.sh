@@ -5,6 +5,10 @@
 set -e
 LOGFILE="/tmp/nightly-build-$(date +%Y-%m-%d).log"
 
+# Load API keys from local env file (not committed to git)
+ENV_FILE="$(dirname "$0")/.env"
+[ -f "$ENV_FILE" ] && source "$ENV_FILE"
+
 echo "=== Nightly Build Starting $(date) ===" | tee -a "$LOGFILE"
 
 # Step 1: Scout (local Ollama — free)
