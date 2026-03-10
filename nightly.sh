@@ -1,5 +1,5 @@
 #!/bin/bash
-# nightly.sh — Master orchestrator. Runs full pipeline with dual model comparison.
+# nightly.sh — Master orchestrator. GPT-only build pipeline.
 # Called by cron at 11PM nightly.
 
 set -e
@@ -11,19 +11,15 @@ ENV_FILE="$(dirname "$0")/.env"
 
 echo "=== Nightly Build Starting $(date) ===" | tee -a "$LOGFILE"
 
-# Step 1: Scout — picks tonight's build target (same brief for both models)
+# Step 1: Scout — picks tonight's build target
 echo "--- Step 1: Scout ---" | tee -a "$LOGFILE"
 bash "$(dirname "$0")/scout.sh" 2>&1 | tee -a "$LOGFILE"
 
-# Step 2a: Build with GPT-4.1-mini
-echo "--- Step 2a: Builder (GPT-4.1-mini) ---" | tee -a "$LOGFILE"
+# Step 2: Build with GPT-4.1-mini
+echo "--- Step 2: Builder (GPT-4.1-mini) ---" | tee -a "$LOGFILE"
 bash "$(dirname "$0")/builder-gpt.sh" 2>&1 | tee -a "$LOGFILE"
 
-# Step 2b: Build with Phi-4 on Mac mini (runs in parallel to save time)
-echo "--- Step 2b: Builder (Phi-4 / Mac mini) ---" | tee -a "$LOGFILE"
-bash "$(dirname "$0")/builder-phi.sh" 2>&1 | tee -a "$LOGFILE"
-
-# Step 3: Deliver — commit both, send comparison to Slack
+# Step 3: Deliver — commit + send to Slack
 echo "--- Step 3: Deliver ---" | tee -a "$LOGFILE"
 bash "$(dirname "$0")/deliver.sh" 2>&1 | tee -a "$LOGFILE"
 
