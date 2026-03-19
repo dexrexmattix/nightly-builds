@@ -1,0 +1,12 @@
+{
+  "name": "scout-agent-zai-benchmark",
+  "version": "1.0.0",
+  "description": "Benchmark z.ai GLM-4.7-Flash vs Gemini Flash for Scout agent",
+  "main": "benchmark.js",
+  "scripts": {
+    "start": "node benchmark.js"
+  },
+  "dependencies": {
+    "axios": "^1.4.0"
+  }
+}
