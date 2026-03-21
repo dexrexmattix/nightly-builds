@@ -1,14 +1,18 @@
 {
-  "name": "zai-glm47-flash-integration",
+  "name": "scout-zai-integration",
   "version": "1.0.0",
-  "description": "Test integration of z.ai GLM-4.7-Flash vs Gemini Flash with cost and quality comparison",
-  "main": "test.js",
+  "description": "Scout agent integration with z.ai GLM-4.7-Flash model for benchmarking",
+  "main": "test.ts",
   "scripts": {
-    "test": "node test.js"
+    "test": "ts-node test.ts"
   },
   "dependencies": {
     "axios": "^1.4.0",
-    "dotenv": "^16.0.3",
-    "string-similarity": "^4.0.4"
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.3.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.3"
   }
 }

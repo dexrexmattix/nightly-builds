@@ -1,7 +1,7 @@
 ---
-BUILD TARGET: Integrate and test z.ai GLM-4.7-Flash as a cheaper model endpoint for Scout with cost and quality comparison.  
-WHY: This could reduce API costs significantly by switching to a cheaper, OpenAI-compatible model without losing quality, directly impacting monthly expenses.  
-WHAT TO BUILD: Add a `zai:manual` auth profile for GLM-4.7-Flash, configure Scout or a dedicated test agent to route requests to `https://api.z.ai/api/paas/v4/` with the new key, then run a batch of typical prompts to compare output quality and token costs versus current Gemini Flash. Produce a simple cost/quality summary report.  
-STACK: node (OpenClaw config + test script)  
+BUILD TARGET: Integrate z.ai GLM-4.7-Flash model as a drop-in alternative routing option for Scout to benchmark cost and quality against Gemini Flash.  
+WHY: This will provide immediate cost savings potential on high-volume agent calls by switching to a cheaper, OpenAI-compatible model without changing code structure, enabling Codi to reduce API spend while maintaining quality.  
+WHAT TO BUILD: Add a new `zai:manual` auth profile with z.ai API key and update Scout agent’s config to route requests to `https://api.z.ai/api/paas/v4/` using GLM-4.7-Flash model; then run comparative test queries and log cost + output quality.  
+STACK: node / TypeScript (existing OpenClaw agent config and test harness)  
 ESTIMATED TIME: 1hr  
 ---
