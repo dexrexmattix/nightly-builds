@@ -1,0 +1,17 @@
+{
+  "authProfiles": {
+    "gemini:manual": {
+      "type": "manual",
+      "apiKey": "YOUR_GEMINI_API_KEY_HERE"
+    }
+  },
+  "openClaw": {
+    "models": {
+      "gemini-flash": {
+        "endpoint": "https://api.gemini.com/v1/flash",
+        "authProfile": "gemini:manual",
+        "modelName": "gemini-flash"
+      }
+    }
+  }
+}
