@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Daily To-Do List Prioritizer</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 2rem;
+    max-width: 600px;
+  }
+  h1 {
+    text-align: center;
+  }
+  textarea {
+    width: 100%;
+    height: 120px;
+    font-size: 1rem;
+    padding: 0.5rem;
+    box-sizing: border-box;
+  }
+  button {
+    margin-top: 1rem;
+    padding: 0.6rem 1.2rem;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  #result {
+    margin-top: 2rem;
+  }
+  #result h2 {
+    margin-bottom: 0.5rem;
+  }
+  ol {
+    padding-left: 1.2rem;
+  }
+  #loading {
+    margin-top: 1rem;
+    font-style: italic;
+    color: #555;
+  }
+  #error {
+    margin-top: 1rem;
+    color: red;
+  }
+  footer {
+    margin-top: 4rem;
+    font-size: 0.8rem;
+    color: #666;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<h1>Daily To-Do List Prioritizer</h1>
+<p>Enter your tasks below, one per line. Then click "Generate Prioritized List" to get your ranked to-do list for the day.</p>
+<textarea id="tasksInput" placeholder="Example:&#10;Buy groceries&#10;Finish project report&#10;Call mom"></textarea>
+<br />
+<button id="generateBtn">Generate Prioritized List</button>
+<div id="loading" style="display:none;">Generating prioritized list, please wait...</div>
+<div id="error"></div>
+<div id="result" style="display:none;">
+  <h2>Your Prioritized To-Do List:</h2>
+  <ol id="todoList"></ol>
+</div>
+
+<script>
+  const generateBtn = document.getElementById('generateBtn');
+  const tasksInput = document.getElementById('tasksInput');
+  const resultDiv = document.getElementById('result');
+  const todoList = document.getElementById('todoList');
+  const loadingDiv = document.getElementById('loading');
+  const errorDiv = document.getElementById('error');
+
+  // OpenAI API key placeholder - user must insert their key here
+  // For security, this demo requires user to enter their key in a prompt.
+  // In production, do not expose keys in client-side code.
+  let OPENAI_API_KEY = null;
+
+  async function prioritizeTasks(tasks) {
+    const prompt = `You are an expert productivity assistant. Given the following list of tasks, rank them in order of priority for today, considering urgency and importance. Return the tasks as a numbered list without additional commentary.
+
+Tasks:
+${tasks.map((t,i) => `${i+1}. ${t}`).join('\n')}
+
+Prioritized list:`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + OPENAI_API_KEY,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages: [{role: 'user', content: prompt}],
+        temperature: 0.5,
+        max_tokens: 150,
+        n: 1,
+        stop: null,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || 'OpenAI API error');
+    }
+
+    const data = await response.json();
+    const text = data.choices[0].message.content.trim();
+    return text;
+  }
+
+  function parsePrioritizedList(text) {
+    // Parse numbered list from AI response
+    // Example: "1. Finish project report\n2. Buy groceries\n3. Call mom"
+    const lines = text.split('\n').filter(l => l.trim());
+    const tasks = [];
+    for (const line of lines) {
+      const match = line.match(/^\s*\d+\.\s*(.+)$/);
+      if (match) {
+        tasks.push(match[1].trim());
+      }
+    }
+    return tasks;
+  }
+
+  generateBtn.addEventListener('click', async () => {
+    errorDiv.textContent = '';
+    resultDiv.style.display = 'none';
+    todoList.innerHTML = '';
+
+    const rawTasks = tasksInput.value.trim();
+    if (!rawTasks) {
+      errorDiv.textContent = 'Please enter at least one task.';
+      return;
+    }
+
+    const tasks = rawTasks.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+    if (tasks.length === 0) {
+      errorDiv.textContent = 'Please enter valid tasks.';
+      return;
+    }
+
+    if (!OPENAI_API_KEY) {
+      OPENAI_API_KEY = prompt('Please enter your OpenAI API key:');
+      if (!OPENAI_API_KEY) {
+        errorDiv.textContent = 'OpenAI API key is required to generate prioritized list.';
+        return;
+      }
+    }
+
+    loadingDiv.style.display = 'block';
+    generateBtn.disabled = true;
+
+    try {
+      const aiResponse = await prioritizeTasks(tasks);
+      const prioritizedTasks = parsePrioritizedList(aiResponse);
+      if (prioritizedTasks.length === 0) {
+        throw new Error('Could not parse AI response.');
+      }
+      todoList.innerHTML = '';
+      prioritizedTasks.forEach(task => {
+        const li = document.createElement('li');
+        li.textContent = task;
+        todoList.appendChild(li);
+      });
+      resultDiv.style.display = 'block';
+    } catch (err) {
+      errorDiv.textContent = 'Error: ' + err.message;
+    } finally {
+      loadingDiv.style.display = 'none';
+      generateBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
